@@ -156,6 +156,11 @@ floating_update_anchored(struct wrap *wrap) {
         x = 0;
         y = ui_height - win_height;
         break;
+    case ANCHOR_SEPARATE:
+        x = 0;
+        y = 0;
+        server_view_set_visible(fview->view, true);
+        break;
     case ANCHOR_BOTTOMRIGHT:
         x = ui_width - win_width;
         y = ui_height - win_height;
@@ -220,6 +225,10 @@ floating_view_create(struct wrap *wrap, struct server_view *view) {
 
         server_view_set_centered(view, false);
         floating_update_anchored(wrap);
+        if (wrap->cfg->theme.ninb_anchor == ANCHOR_SEPARATE) {
+            ninbot_toplevel_show(wrap->server->ui);
+            floating_set_visible(wrap, true);
+        }
     }
 }
 
@@ -476,7 +485,7 @@ on_button(void *data, uint32_t button, bool pressed) {
     // Check to see if the input focus should be changed to a new window. If the user did not click
     // on any floating window, then input focus should be given back to the Minecraft instance.
     struct floating_view *fview = floating_view_at(wrap, wrap->input.x, wrap->input.y);
-    if (!fview) {
+    if (!fview || (wrap->cfg->theme.ninb_anchor == ANCHOR_SEPARATE && !wrap->server->ui->ninbot.is_focused)) {
         ww_assert(wrap->view);
         server_set_input_focus(wrap->server, wrap->view);
         return false;

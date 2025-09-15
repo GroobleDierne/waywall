@@ -61,6 +61,7 @@ struct server_ui_config {
     int32_t fullscreen_width;
     int32_t fullscreen_height;
 
+    bool xwayland_toplevel;
     uint32_t ninb_opacity;
 };
 

@@ -375,6 +375,26 @@ on_view_surface_commit(struct wl_listener *listener, void *data) {
     }
 }
 
+void xwayland_toplevel_create(struct server_ui *ui) {
+    ui->ninbot.surface = wl_compositor_create_surface(ui->server->backend->compositor);
+    check_alloc(ui->ninbot.surface);
+
+    struct xdg_surface *xdg_ninbot = xdg_wm_base_get_xdg_surface(ui->server->backend->xdg_wm_base, ui->ninbot.surface);
+    check_alloc(xdg_ninbot);
+    xdg_surface_add_listener(xdg_ninbot, &ninbot_surface_listener, ui);
+
+    ui->ninbot.top_level = xdg_surface_get_toplevel(xdg_ninbot);
+    check_alloc(ui->ninbot.top_level);
+    xdg_toplevel_add_listener(ui->ninbot.top_level, &ninbot_toplevel_listener, ui);
+}
+
+void xwayland_toplevel_destroy(struct server_ui *ui) {
+    xdg_toplevel_destroy(ui->ninbot.top_level);
+    wl_surface_destroy(ui->ninbot.surface);
+    ui->ninbot.top_level = NULL;
+    ui->ninbot.surface = NULL;
+}
+
 struct server_ui *
 server_ui_create(struct server *server, struct config *cfg) {
     struct server_ui *ui = zalloc(1, sizeof(*ui));
@@ -389,19 +409,6 @@ server_ui_create(struct server *server, struct config *cfg) {
 
     ui->root.viewport = wp_viewporter_get_viewport(server->backend->viewporter, ui->root.surface);
     check_alloc(ui->root.viewport);
-
-    if (cfg->theme.ninb_anchor == ANCHOR_SEPARATE) {
-        ui->ninbot.surface = wl_compositor_create_surface(server->backend->compositor);
-        check_alloc(ui->ninbot.surface);
-
-        struct xdg_surface *xdg_ninbot = xdg_wm_base_get_xdg_surface(server->backend->xdg_wm_base, ui->ninbot.surface);
-        check_alloc(xdg_ninbot);
-        xdg_surface_add_listener(xdg_ninbot, &ninbot_surface_listener, ui);
-
-        ui->ninbot.top_level = xdg_surface_get_toplevel(xdg_ninbot);
-        check_alloc(ui->ninbot.top_level);
-        xdg_toplevel_add_listener(ui->ninbot.top_level, &ninbot_toplevel_listener, ui);
-    }
 
     if (server->backend->tearing_control) {
         ui->root.tearing_control = wp_tearing_control_manager_v1_get_tearing_control(
@@ -592,6 +599,12 @@ server_ui_use_config(struct server_ui *ui, struct server_ui_config *config) {
             wp_alpha_modifier_surface_v1_set_multiplier(view->alpha_surface, config->ninb_opacity);
         }
     }
+
+    if (config->xwayland_toplevel && ui->ninbot.surface == NULL) {
+        xwayland_toplevel_create(ui);
+    } else if (ui->ninbot.surface != NULL && !config->xwayland_toplevel) {
+        xwayland_toplevel_destroy(ui);
+    }
 }
 
 struct server_ui_config *
@@ -607,6 +620,12 @@ server_ui_config_create(struct server_ui *ui, struct config *cfg) {
     if (!config->background) {
         ww_log(LOG_ERROR, "failed to create background buffer");
         goto fail;
+    }
+
+    if (cfg->theme.ninb_anchor == ANCHOR_SEPARATE) {
+        config->xwayland_toplevel = true;
+    } else {
+        config->xwayland_toplevel = false;
     }
 
     config->tearing = cfg->experimental.tearing;
